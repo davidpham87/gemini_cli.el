@@ -2,10 +2,6 @@
 
 A library for interacting with Gemini from Emacs.
 
-## Reliability
-
-Vibe coded with Gemini, tested and checked manually.
-
 ## Motivation
 
 Gemini as your next programming language with gemini-cli.
@@ -71,3 +67,7 @@ For more detailed information on `gemini-cli`, refer to the official documentati
 
 *   [Gemini CLI GitHub Repository](https://github.com/google-gemini/gemini-cli)
 *   [Gemini CLI Official Website](https://geminicli.cloud/)
+
+## Reliability
+
+Vibe coded with Gemini, tested and checked manually.
