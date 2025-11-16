@@ -1,4 +1,4 @@
-# gemini_cli.el: Emacs interface to gemini cli
+# gemini-cli-mode: Emacs interface to gemini cli
 
 A library for interacting with Gemini from Emacs. Provide a `gemini` mode with
 shortcuts to
