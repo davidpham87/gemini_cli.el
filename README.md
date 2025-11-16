@@ -20,12 +20,15 @@ it fun to work with LLMs from Emacs.
 
 ## Shortcuts
 
-| Shortcut  | Description                                                               |
-| --------- | -----------                                                               |
-| `C-c C-p` | Start the Gemini CLI in a new terminal window.                            |
-| `C-c C-z` | Switch to the Gemini CLI buffer.                                          |
-| `C-c C-r` | Send the selected region to the Gemini CLI.                               |
-| `C-M-x`   | Send the current markdown section to the Gemini CLI.                      |
+| Shortcut  | Description                                          |
+|-----------|------------------------------------------------------|
+| `C-c C-p` | Start the Gemini CLI in a new terminal window.       |
+| `C-c C-z` | Switch to the Gemini CLI buffer.                     |
+| `C-c C-r` | Send the selected region to the Gemini CLI.          |
+| `C-M-x`   | Send the current markdown section to the Gemini CLI. |
+| `C-c M-p` | Move up gemini-cli window by one page                |
+| `C-c M-n` | Move down gemini-cli window by one page              |
+|-----------|------------------------------------------------------|
 
 ## Installation
 
