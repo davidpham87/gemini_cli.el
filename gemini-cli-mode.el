@@ -7,7 +7,7 @@
 ;; Package-Version: 20251116.12345
 ;; Keywords: gemini-cli tools
 ;; URL: https://github.com/davidpham87/gemini_cli.el
-;; Package-Requires: ((emacs "29.1") (markdown-mode "2.5") (vterm "0.1"))
+;; Package-Requires: ((emacs "29.1") (markdown-mode "2.5") (vterm "0.0.2"))
 
 ;; This file is not part of GNU Emacs.
 
