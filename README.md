@@ -68,9 +68,32 @@ brew install gemini-cli
 
 ### Emacs Setup
 
-Once `gemini-cli` is installed, you can set up `gemini_cli.el` in your Emacs configuration.
+Once `gemini-cli` is installed, you can add `gemini_cli.el` to your Emacs configuration. The recommended way is to install it from MELPA.
 
-(Further instructions for Emacs setup would go here, e.g., how to load the `gemini_cli.el` file.)
+1.  **Add MELPA to your package archives.** If you haven't already, add the following to your `init.el` or `.emacs` file:
+
+    ```elisp
+    (require 'package)
+    (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+    (package-initialize)
+    ```
+
+2.  **Install and configure `gemini-cli` using `use-package`:**
+
+    ```elisp
+    (use-package gemini-cli
+      :ensure t
+      :config
+      (gemini-cli/mode 1))
+    ```
+    This will download the package from MELPA and enable `gemini-cli-mode` globally.
+
+3.  **Manual Installation:** Alternatively, if you are not using MELPA, ensure `gemini_cli.el` is in your Emacs `load-path` and add the following to your configuration:
+
+    ```elisp
+    (require 'gemini-cli)
+    (gemini-cli/mode 1)
+    ```
 
 ## Documentation
 
