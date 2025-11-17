@@ -38,6 +38,25 @@ it fun to work with LLMs from Emacs.
 | `C-c M-n` | Page down gemini-cli window by one page              |
 
 
+## Usage
+
+Once `gemini-cli-mode` is installed and enabled, you can interact with the Gemini CLI from any buffer. Here are some common workflows:
+
+1.  **Start the Gemini CLI:**
+    Press `C-c C-p` to open a new `vterm` buffer with the `gemini` command running.
+
+2.  **Switch to the Gemini CLI:**
+    Press `C-c C-z` to quickly jump to the `*gemini-cli*` buffer.
+
+3.  **Send a region of text:**
+    Select a region of text in any buffer and press `C-c C-r` to send it to the Gemini CLI. This is useful for sending code snippets or questions.
+
+4.  **Send a markdown section:**
+    When editing a markdown file, you can send the current section (the text under the current heading) to the Gemini CLI by pressing `C-M-x`.
+
+5.  **Navigate the Gemini CLI:**
+    You can use `C-c M-p` and `C-c M-n` to page up and down in the `*gemini-cli*` buffer, which is useful when the output is long.
+
 ## Installation
 
 To use `gemini-cli.el`, you first need to install the `gemini-cli` itself.
@@ -77,6 +96,20 @@ You will need to install the following dependencies.
 * Markdown mode
 
 For now you can just download the file and execute it on your path.
+
+## Configuration
+
+You can customize the behavior of `gemini-cli-mode` by setting the following variables in your Emacs configuration:
+
+*   `gemini-cli-buffer`: The name of the buffer for the Gemini CLI process. The default is `"*gemini-cli*"`.
+
+For example, to change the default keybindings, you can add the following to your `init.el` file:
+
+```emacs-lisp
+(with-eval-after-load 'gemini-cli-mode
+  (define-key gemini-cli-mode-map (kbd "C-c g p") 'gemini-cli-start)
+  (define-key gemini-cli-mode-map (kbd "C-c g z") 'gemini-cli-switch-buffer))
+```
 
 ## Documentation
 
