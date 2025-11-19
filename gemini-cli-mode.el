@@ -59,7 +59,7 @@ not log the conversation to a file.  Otherwise, it calls
       (message "Gemini process already running")
     (progn
       (let* ((new-window (split-window-horizontally)))
-        (setq gemini-cli-buffer (vterm "*gemini-cli*"))
+        (setq gemini-cli-buffer (vterm "gemini-cli"))
         (when (not ignore-logging-p)
           (gemini-cli-log-conversation))
         (set-window-buffer new-window gemini-cli-buffer)
@@ -76,6 +76,25 @@ it in another window.  If the buffer is not live, it calls
       (switch-to-buffer-other-window "*gemini-cli*")
     (gemini-cli-start)))
 
+(defun gemini-execute-prompt ()
+  (if (buffer-live-p gemini-cli-buffer)
+      (progn
+        (with-current-buffer gemini-cli-buffer
+          (vterm-send-escape)
+          (vterm-send-return)
+          (vterm-send-return)))
+    (message "Gemini process not running. Run M-x gemini-cli-start first.")))
+
+(defun gemini-send-prompt (prompt &optional )
+  (interactive "r")
+  (if (buffer-live-p gemini-cli-buffer)
+      (progn
+        (with-current-buffer gemini-cli-buffer
+          (vterm-send-string prompt)
+          (sleep-for 0.5)
+          (gemini-execute-prompt)))
+    (message "Gemini process not running. Run M-x gemini-cli-start first.")))
+
 (defun gemini-cli-send-region (start end)
   "Send the current region to the Gemini CLI process.
 The text between START and END is sent to the `*gemini-cli*'
@@ -86,17 +105,8 @@ gemini-cli-send-region' or bound to a key.  When called
 interactively, START and END are the boundaries of the current
 region."
   (interactive "r")
-  (let ((current-buffer (current-buffer))
-        (region-text (buffer-substring-no-properties start end)))
-    (if (buffer-live-p gemini-cli-buffer)
-        (progn
-          (with-current-buffer gemini-cli-buffer
-            (vterm-send-string region-text)
-            (sleep-for 0.5)
-            (vterm-send-escape)
-            (vterm-send-return)
-            (vterm-send-return)))
-      (message "Gemini process not running. Run M-x gemini-cli-start first."))))
+  (let ((region-text (buffer-substring-no-properties start end)))
+    (gemini-send-prompt region-text)))
 
 (defun gemini-cli-send-key (n key &optional shift meta ctrl accept-proc-output)
   "Send a KEY with the shift modifier to the Gemini CLI.
@@ -140,6 +150,17 @@ section to the Gemini CLI."
       (outline-end-of-subtree)
       (gemini-cli-send-region start (point)))))
 
+(defun gemini-cli-start-line ()
+  "Go to the start of the instruction prompts"
+  (interactive)
+  (gemini-cli-send-key 1 "a" nil t))
+
+(defun gemini-cli-import-last-result-at-point ()
+  "Copy the last result of gemini-cli and copy it in the current buffer"
+  (interactive)
+  (gemini-send-prompt "/copy" 0.1)
+  (yank))
+
 (defvar gemini-cli-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-p") 'gemini-cli-start)
@@ -148,6 +169,7 @@ section to the Gemini CLI."
     (define-key map (kbd "C-M-x") 'gemini-cli-send-section)
     (define-key map (kbd "C-c M-p") 'gemini-cli-page-up)
     (define-key map (kbd "C-c M-n") 'gemini-cli-page-down)
+    (define-key map (kbd "C-c C-a") 'gemini-cli-start-line)
     map)
   "Keymap for gemini-mode.")
 
@@ -156,7 +178,7 @@ section to the Gemini CLI."
 This mode provides keybindings for starting the Gemini CLI,
 switching to the CLI buffer, and sending text to the CLI."
   :init-value nil
-  :lighter " Gemini"
+  :lighter "Gemini"
   :keymap gemini-cli-mode-map)
 
 ;; Activate gemini mode for .gemini files
