@@ -101,6 +101,21 @@ For now you can just download the file and execute it on your path.
 
 You can customize the behavior of `gemini-cli-mode` by setting the following variables in your Emacs configuration:
 
+*   `gemini-cli-agents`: A list of property lists defining the available Gemini agents. Each agent configuration can have the following properties:
+    *   `:name` (string): The name of the agent.
+    *   `:command` (string, optional): The command to launch the agent. Defaults to `gemini-cli-cmd` ("gemini").
+    *   `:home-directory` (string, optional): The working directory for the agent.
+    *   `:initial-prompt` (string, optional): An initial prompt to send to the agent upon startup.
+
+Example configuration:
+
+```emacs-lisp
+(setq gemini-cli-agents
+      '((:name "gemini" :command "gemini")
+        (:name "coder" :command "gemini" :initial-prompt "You are a coding assistant.")
+        (:name "writer" :command "gemini" :initial-prompt "You are a creative writer.")))
+```
+
 *   `gemini-cli-buffer`: The name of the buffer for the Gemini CLI process. The default is `"*gemini-cli*"`.
 
 For example, to change the default keybindings, you can add the following to your `init.el` file:
