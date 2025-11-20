@@ -19,7 +19,7 @@
 
 ;;; Code:
 
-(require 'cl-lib)
+(require 'cl-lib) ;; Required for cl-loop and other cl-lib features
 
 (defgroup gemini-cli nil
   "Gemini CLI interface."
@@ -28,6 +28,7 @@
 (defcustom gemini-cli-agents
   '((:name "gemini" :command "gemini"))
   "List of Gemini CLI agents configuration.
+This variable is used to configure multiple agents.
 Each element is a property list with keys:
 :name - Name of the agent (string)
 :command - Command to launch (string, default: `gemini-cli-cmd`)
@@ -142,12 +143,10 @@ not log the conversation to a file.  Otherwise, it calls
 
 (defun gemini-cli--get-active-agent-names ()
   "Return a list of names of active agents."
-  (let (names)
-    (maphash (lambda (k v)
-               (when (buffer-live-p v)
-                 (push k names)))
-             gemini-cli-active-buffers)
-    names))
+  (cl-loop for k being the hash-keys of gemini-cli-active-buffers
+           using (hash-values v)
+           when (buffer-live-p v)
+           collect k))
 
 (defun gemini-cli-switch-buffer (&optional prefix)
   "Switch to a Gemini CLI buffer.
@@ -301,18 +300,15 @@ With PREFIX, prompt for agent."
     (if (not active-names)
         (message "No active Gemini agents.")
       (delete-other-windows)
-      (let ((first-agent t))
-        (dolist (name active-names)
-          (let ((buffer (gethash name gemini-cli-active-buffers)))
-            (if (buffer-live-p buffer)
-                (progn
-                  (if first-agent
-                      (switch-to-buffer buffer)
-                    (progn
+      (cl-loop for name in active-names
+               for first = t then nil
+               for buffer = (gethash name gemini-cli-active-buffers)
+               when (buffer-live-p buffer)
+               do (progn
+                    (unless first
                       (split-window-horizontally)
-                      (other-window 1)
-                      (switch-to-buffer buffer)))
-                  (setq first-agent nil)))))))))
+                      (other-window 1))
+                    (switch-to-buffer buffer))))))
 
 (defvar gemini-cli-mode-map
   (let ((map (make-sparse-keymap)))
