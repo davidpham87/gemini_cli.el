@@ -19,19 +19,50 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
+(defgroup gemini-cli nil
+  "Gemini CLI interface."
+  :group 'tools)
+
+(defcustom gemini-cli-agents
+  '((:name "gemini" :command "gemini"))
+  "List of Gemini CLI agents configuration.
+Each element is a property list with keys:
+:name - Name of the agent (string)
+:command - Command to launch (string, default: `gemini-cli-cmd`)
+:home-directory - Working directory (string, optional)
+:initial-prompt - Initial command to send (string, optional)"
+  :type '(repeat (plist :key-type symbol :value-type string))
+  :group 'gemini-cli)
+
+(defvar gemini-cli-active-buffers (make-hash-table :test 'equal)
+  "Hash table mapping agent names to their vterm buffers.")
+
+(defvar gemini-cli-last-buffer nil
+  "The last visited Gemini CLI buffer.")
+
 (defvar gemini-cli-buffer nil
-  "Buffer for the Gemini CLI process.")
+  "Buffer for the Gemini CLI process.
+DEPRECATED: Use `gemini-cli-last-buffer` or look up in `gemini-cli-active-buffers`.")
 
 (defvar gemini-cli-cmd "gemini"
   "Command to use to launch gemini")
 
-(defun gemini-cli-rebind-cli ()
-  "Rebind `gemini-cli-buffer' to the current buffer.
-This command is useful if the `gemini-cli-buffer' variable is not
-pointing to the correct buffer, for example, if the buffer was
-killed and restarted."
-  (interactive)
-  (setq gemini-cli-buffer (switch-to-buffer "*gemini-cli*")))
+(defun gemini-cli-rebind-cli (&optional agent-name)
+  "Bind the current buffer to a Gemini agent.
+This is useful if the connection between the agent and the buffer
+is lost or if you want to treat an existing buffer as an agent's buffer.
+Prompts for AGENT-NAME if not provided."
+  (interactive (list (completing-read "Bind current buffer to agent: "
+                                      (mapcar (lambda (a) (plist-get a :name)) gemini-cli-agents)
+                                      nil t)))
+  (let ((name (or agent-name "gemini")))
+    (puthash name (current-buffer) gemini-cli-active-buffers)
+    (setq gemini-cli-last-buffer (current-buffer))
+    (when (string= name "gemini")
+      (setq gemini-cli-buffer (current-buffer)))
+    (message "Bound current buffer to agent '%s'." name)))
 
 (defun gemini-cli-log-conversation ()
   "Log the conversation with Gemini to a file.
@@ -47,125 +78,240 @@ is a workaround for a bug that prevents scrolling up in the
     (vterm-send-string (format "script %s" (shell-quote-argument log-file)))
     (vterm-send-return)))
 
-(defun gemini-cli-start (&optional ignore-logging-p)
+(defun gemini-cli--get-agent-config (name)
+  "Get the configuration for the agent with NAME."
+  (cl-find-if (lambda (agent) (string= (plist-get agent :name) name))
+              gemini-cli-agents))
+
+(defun gemini-cli-start (&optional agent-config-or-name ignore-logging-p)
   "Start the Gemini CLI in a vterm buffer.
-This function opens a new vterm buffer named `*gemini-cli*',
-splits the window horizontally, and starts the Gemini CLI.  If a
-Gemini process is already running, it displays a message and
-does nothing.
+AGENT-CONFIG-OR-NAME can be a configuration plist or an agent name string.
+If nil, it defaults to the \"gemini\" agent or prompts if multiple agents are defined.
+
+This function opens a new vterm buffer named `*gemini-{{name}}*',
+splits the window horizontally, and starts the Gemini CLI.
 
 When called with a prefix argument IGNORE-LOGGING-P, it will
 not log the conversation to a file.  Otherwise, it calls
 `gemini-cli-log-conversation' to start logging."
-  (interactive "P")
-  (if (buffer-live-p gemini-cli-buffer)
-      (message "Gemini process already running")
-    (progn
-      (let* ((new-window (split-window-horizontally)))
-        (setq gemini-cli-buffer (vterm "*gemini-cli*"))
-        (when (not ignore-logging-p)
-          (gemini-cli-log-conversation))
-        (set-window-buffer new-window gemini-cli-buffer)
-        (vterm-send-string gemini-cli-cmd)
-        (vterm-send-return)))))
+  (interactive (list nil current-prefix-arg))
+  (let* ((agent-name
+          (cond ((stringp agent-config-or-name) agent-config-or-name)
+                ((and (listp agent-config-or-name) (plist-get agent-config-or-name :name))
+                 (plist-get agent-config-or-name :name))
+                ((> (length gemini-cli-agents) 1)
+                 (completing-read "Select agent to start: " (mapcar (lambda (a) (plist-get a :name)) gemini-cli-agents)))
+                (t "gemini")))
+         (config (if (listp agent-config-or-name)
+                     agent-config-or-name
+                   (gemini-cli--get-agent-config agent-name)))
+         ;; If config is not found in gemini-cli-agents but name is "gemini", create default config
+         (config (or config (list :name "gemini" :command gemini-cli-cmd)))
+         (buffer-name (format "*gemini-%s*" agent-name))
+         (buffer (gethash agent-name gemini-cli-active-buffers)))
 
-(defun gemini-cli-switch-buffer ()
-  "Switch to the Gemini CLI buffer.
-If the `*gemini-cli*' buffer is live, this function switches to
-it in another window.  If the buffer is not live, it calls
-`gemini-cli-start' to create it."
-  (interactive)
-  (if (buffer-live-p gemini-cli-buffer)
-      (switch-to-buffer-other-window "*gemini-cli*")
-    (gemini-cli-start)))
-
-(defun gemini-execute-prompt ()
-  (interactive)
-  (if (buffer-live-p gemini-cli-buffer)
+    (if (buffer-live-p buffer)
+        (message "Agent '%s' is already running in buffer %s" agent-name buffer)
       (progn
-        (with-current-buffer gemini-cli-buffer
-          (vterm-send-escape)
+        (let* ((new-window (split-window-horizontally))
+               (cmd (or (plist-get config :command) gemini-cli-cmd))
+               (home-dir (plist-get config :home-directory))
+               (init-prompt (plist-get config :initial-prompt)))
+          (setq buffer (vterm buffer-name))
+          (puthash agent-name buffer gemini-cli-active-buffers)
+          (setq gemini-cli-last-buffer buffer)
+          ;; Compatibility with single buffer mode
+          (when (string= agent-name "gemini")
+            (setq gemini-cli-buffer buffer))
+
+          (when (not ignore-logging-p)
+            (gemini-cli-log-conversation))
+          (set-window-buffer new-window buffer)
+
+          (when home-dir
+            (vterm-send-string (format "cd %s" home-dir))
+            (vterm-send-return))
+
+          (vterm-send-string cmd)
           (vterm-send-return)
-          (vterm-send-return)))
-    (message "Gemini process not running. Run M-x gemini-cli-start first.")))
 
-(defun gemini-send-prompt (prompt &optional sleep-time)
-  (interactive "r")
-  (if (buffer-live-p gemini-cli-buffer)
-      (progn
-        (with-current-buffer gemini-cli-buffer
-          (vterm-send-string prompt)
-          (sleep-for (or sleep-time 0.5))
-          (gemini-execute-prompt)
-          (vterm-send-return)))
-    (message "Gemini process not running. Run M-x gemini-cli-start first.")))
+          (when init-prompt
+             (vterm-send-string init-prompt)
+             (gemini-execute-prompt)
+             (vterm-send-return)))))))
 
-(defun gemini-cli-send-region (start end)
+(defun gemini-cli--get-active-agent-names ()
+  "Return a list of names of active agents."
+  (let (names)
+    (maphash (lambda (k v)
+               (when (buffer-live-p v)
+                 (push k names)))
+             gemini-cli-active-buffers)
+    names))
+
+(defun gemini-cli-switch-buffer (&optional prefix)
+  "Switch to a Gemini CLI buffer.
+By default, switches to the last visited Gemini buffer.
+With PREFIX argument (C-u), prompts to select an agent to switch to.
+If no agent is running, it starts the default one."
+  (interactive "P")
+  (let ((target-buffer
+         (if prefix
+             (let* ((active-names (gemini-cli--get-active-agent-names))
+                    (agent-name (completing-read "Switch to agent: " active-names)))
+               (gethash agent-name gemini-cli-active-buffers))
+           gemini-cli-last-buffer)))
+
+    (if (buffer-live-p target-buffer)
+        (progn
+          (switch-to-buffer-other-window target-buffer)
+          (setq gemini-cli-last-buffer target-buffer))
+      (call-interactively 'gemini-cli-start))))
+
+(defun gemini-cli--get-target-buffer (&optional prefix)
+  "Get the target buffer for commands.
+If PREFIX is non-nil, prompt the user to select an active agent.
+Otherwise, return `gemini-cli-last-buffer`.
+If the target buffer is not live, try to find another active one or return nil."
+  (let ((buffer
+         (if prefix
+             (let* ((active-names (gemini-cli--get-active-agent-names))
+                    (agent-name (if active-names
+                                    (completing-read "Execute in agent: " active-names)
+                                  nil)))
+               (if agent-name (gethash agent-name gemini-cli-active-buffers) nil))
+           gemini-cli-last-buffer)))
+    (if (buffer-live-p buffer)
+        buffer
+      ;; Fallback: try to find any live buffer
+      (let ((active-names (gemini-cli--get-active-agent-names)))
+        (if active-names
+            (let ((new-buf (gethash (car active-names) gemini-cli-active-buffers)))
+              (setq gemini-cli-last-buffer new-buf)
+              new-buf)
+          nil)))))
+
+(defun gemini-execute-prompt (&optional prefix)
+  (interactive "P")
+  (let ((target-buffer (gemini-cli--get-target-buffer prefix)))
+    (if (buffer-live-p target-buffer)
+        (progn
+          (setq gemini-cli-last-buffer target-buffer)
+          (with-current-buffer target-buffer
+            (vterm-send-escape)
+            (vterm-send-return)
+            (vterm-send-return)))
+      (message "Gemini process not running. Run M-x gemini-cli-start first."))))
+
+(defun gemini-send-prompt (prompt &optional sleep-time prefix)
+  (interactive "sPrompt: \nP")
+  (let ((target-buffer (gemini-cli--get-target-buffer prefix)))
+    (if (buffer-live-p target-buffer)
+        (progn
+          (setq gemini-cli-last-buffer target-buffer)
+          (with-current-buffer target-buffer
+            (vterm-send-string prompt)
+            (sleep-for (or sleep-time 0.5))
+            (gemini-execute-prompt)
+            (vterm-send-return)))
+      (message "Gemini process not running. Run M-x gemini-cli-start first."))))
+
+(defun gemini-cli-send-region (start end &optional prefix)
   "Send the current region to the Gemini CLI process.
-The text between START and END is sent to the `*gemini-cli*'
+The text between START and END is sent to the Gemini CLI
 buffer without switching the current buffer.
+
+When called with a prefix argument (C-u), prompt for the target agent.
 
 This function is interactive, so it can be called with `M-x
 gemini-cli-send-region' or bound to a key.  When called
 interactively, START and END are the boundaries of the current
 region."
-  (interactive "r")
+  (interactive "r\nP")
   (let ((region-text (buffer-substring-no-properties start end)))
-    (gemini-send-prompt region-text)))
+    (gemini-send-prompt region-text nil prefix)))
 
-(defun gemini-cli-send-key (n key &optional shift meta ctrl accept-proc-output)
+(defun gemini-cli-send-key (n key &optional shift meta ctrl accept-proc-output prefix)
   "Send a KEY with the shift modifier to the Gemini CLI.
-This function sends the specified KEY to the `*gemini-cli*'
+This function sends the specified KEY to the Gemini CLI
 buffer N times with the shift modifier active.
 
 Argument KEY is the key to send, as a string.
 Argument N is the number of times to send the key.
-Optional modifiers SHIFT, META and CTRL."
-  (if (buffer-live-p gemini-cli-buffer)
-      (progn
-        (with-current-buffer gemini-cli-buffer
-          (dotimes (number n)
-            (vterm-send-key key shift meta ctrl accept-proc-output))))
-    (message "Gemini process not running. Run M-x gemini-cli-start first.")))
+Optional modifiers SHIFT, META and CTRL.
+Optional PREFIX to select agent."
+  (let ((target-buffer (gemini-cli--get-target-buffer prefix)))
+    (if (buffer-live-p target-buffer)
+        (progn
+          (setq gemini-cli-last-buffer target-buffer)
+          (with-current-buffer target-buffer
+            (dotimes (number n)
+              (vterm-send-key key shift meta ctrl accept-proc-output))))
+      (message "Gemini process not running. Run M-x gemini-cli-start first."))))
 
-(defun gemini-cli-page-up ()
+(defun gemini-cli-page-up (&optional prefix)
   "Send the page up key to the Gemini CLI.
 This is equivalent to pressing the Page Up key in the
-`*gemini-cli*' buffer."
-  (interactive)
-  (gemini-cli-send-key 1 "<prior>" t))
+Gemini buffer.
+With PREFIX, prompt for agent."
+  (interactive "P")
+  (gemini-cli-send-key 1 "<prior>" t nil nil nil prefix))
 
-(defun gemini-cli-page-down ()
+(defun gemini-cli-page-down (&optional prefix)
   "Send the page down key to the Gemini CLI.
 This is equivalent to pressing the Page Down key in the
-`*gemini-cli*' buffer."
-  (interactive)
-  (gemini-cli-send-key 1 "<next>" t))
+Gemini buffer.
+With PREFIX, prompt for agent."
+  (interactive "P")
+  (gemini-cli-send-key 1 "<next>" t nil nil nil prefix))
 
-(defun gemini-cli-send-section ()
+(defun gemini-cli-send-section (&optional prefix)
   "Send the current markdown section to the Gemini CLI.
 This function finds the boundaries of the current markdown
 section (using `outline-back-to-heading' and
 `outline-end-of-subtree') and sends the text within that
-section to the Gemini CLI."
-  (interactive)
+section to the Gemini CLI.
+With PREFIX, prompt for agent."
+  (interactive "P")
   (save-excursion
     (outline-back-to-heading t)
     (let ((start (point)))
       (outline-end-of-subtree)
-      (gemini-cli-send-region start (point)))))
+      (gemini-cli-send-region start (point) prefix))))
 
-(defun gemini-cli-start-line ()
-  "Go to the start of the instruction prompts"
-  (interactive)
-  (gemini-cli-send-key 1 "a" nil t))
+(defun gemini-cli-start-line (&optional prefix)
+  "Go to the start of the instruction prompts.
+With PREFIX, prompt for agent."
+  (interactive "P")
+  (gemini-cli-send-key 1 "a" nil t nil nil prefix))
 
-(defun gemini-cli-copy-last-result-at-point ()
-  "Copy the last result of gemini-cli and copy it in the current buffer"
-  (interactive)
-  (gemini-send-prompt "/copy" 0.1)
+(defun gemini-cli-copy-last-result-at-point (&optional prefix)
+  "Copy the last result of gemini-cli and copy it in the current buffer.
+With PREFIX, prompt for agent."
+  (interactive "P")
+  (gemini-send-prompt "/copy" 0.1 prefix)
   (sleep-for 0.1)
   (insert (shell-command-to-string "xclip -o -selection clipboard")))
+
+(defun gemini-cli-show-all ()
+  "Show all active Gemini CLI buffers in separate windows."
+  (interactive)
+  (let ((active-names (gemini-cli--get-active-agent-names)))
+    (if (not active-names)
+        (message "No active Gemini agents.")
+      (delete-other-windows)
+      (let ((first-agent t))
+        (dolist (name active-names)
+          (let ((buffer (gethash name gemini-cli-active-buffers)))
+            (if (buffer-live-p buffer)
+                (progn
+                  (if first-agent
+                      (switch-to-buffer buffer)
+                    (progn
+                      (split-window-horizontally)
+                      (other-window 1)
+                      (switch-to-buffer buffer)))
+                  (setq first-agent nil)))))))))
 
 (defvar gemini-cli-mode-map
   (let ((map (make-sparse-keymap)))
