@@ -146,12 +146,10 @@ not log the conversation to a file.  Otherwise, it calls
 
     (if (buffer-live-p buffer)
         (message "Agent '%s' is already running in buffer %s" agent-name buffer)
-      (let* ((new-window (split-window-horizontally))
-             (buffer-name (format "*gemini-%s*" agent-name))
-             (other-buffer (switch-to-buffer-other-window buffer-name))
-             (new-buffer
-              (vterm (generate-new-buffer buffer-name))))
+      (let ((new-window (split-window-horizontally))
+            (new-buffer (vterm (format "*gemini-%s*" agent-name))))
         (gemini-cli--setup-buffer-state agent-name new-buffer)
+        (set-window-buffer new-window new-buffer)
         (gemini-cli--initialize-session new-buffer config ignore-logging-p)))))
 
 (defun gemini-cli--get-active-agent-names ()
@@ -306,6 +304,12 @@ With PREFIX, prompt for agent."
   (sleep-for 0.1)
   (insert (shell-command-to-string "xclip -o -selection clipboard")))
 
+(defun gemini-cli-send-escape (&optional prefix)
+  "Send the escape key to the Gemini CLI.
+With PREFIX, prompt for agent."
+  (interactive "P")
+  (gemini-cli--send-key 1 "<escape>" nil nil nil nil prefix))
+
 (defun gemini-cli-show-all ()
   "Show all active Gemini CLI buffers in separate windows."
   (interactive)
@@ -334,6 +338,7 @@ With PREFIX, prompt for agent."
     (define-key map (kbd "C-c C-a") 'gemini-cli-start-line)
     (define-key map (kbd "C-c C-e") 'gemini-cli-copy-last-result-at-point)
     (define-key map (kbd "C-c C-<return>") 'gemini-cli-execute-prompt)
+    (define-key map (kbd "C-c C-q") 'gemini-cli-send-escape)
     map)
   "Keymap for gemini-mode.")
 
