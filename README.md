@@ -107,16 +107,27 @@ You can customize the behavior of `gemini-cli-mode` by setting the following var
     *   `:home-directory` (string, optional): The working directory for the agent.
     *   `:initial-prompt` (string, optional): An initial prompt to send to the agent upon startup.
 
-Example configuration:
+### Example Configuration
 
 ```emacs-lisp
 (setq gemini-cli-agents
-      '((:name "gemini" :command "gemini")
-        (:name "coder" :command "gemini" :initial-prompt "You are a coding assistant.")
-        (:name "writer" :command "gemini" :initial-prompt "You are a creative writer.")))
+      '((:name "default" :command "gemini")
+        (:name "coder"
+         :command "gemini"
+         :home-directory "~/projects/code"
+         :initial-prompt "You are an expert software engineer. Focus on clean, performant code.")
+        (:name "writer"
+         :command "gemini"
+         :initial-prompt "You are a creative writer. Focus on engaging storytelling.")))
 ```
 
-*   `gemini-cli-buffer`: The name of the buffer for the Gemini CLI process. The default is `"*gemini-cli*"`.
+### Configuration Rationale
+
+The configuration design using a list of property lists (plists) was chosen for several reasons:
+
+1.  **Extensibility**: Using property lists allows us to easily add new configuration options (like `:model`, `:temperature`, or `:api-key`) in the future without breaking existing configurations.
+2.  **Multiple Contexts**: By supporting multiple named agents, users can maintain separate "contexts" or "sessions". For example, you can have a long-running "coder" session with context about your project, and switch to a fresh "writer" session for documentation, without polluting the context of either.
+3.  **Simplicity**: A simple list is easy to manipulate and understand in Emacs Lisp, while still offering enough structure for rich configuration.
 
 For example, to change the default keybindings, you can add the following to your `init.el` file:
 
